@@ -1,0 +1,17 @@
+# Ignore the node_modules folder, which contains dependencies.
+node_modules/
+uploads/
+# Ignore the .env file, which often contains sensitive information like API keys.
+.env
+package-lock.json
+logs
+
+# Ignore the tmp folder, which may be used for temporary files.
+tmp/
+
+# Ignore the package-lock.json file, as it is generated and not necessary for others.
+# package-lock.json
+
+# Ignore the logs folder, which may contain logs generated during development.
+logs/
+
