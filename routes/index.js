@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const { authenticate, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const authRoutes = require("./auth.routes");
 const doctorRoutes = require("./doctor.routes");
@@ -10,6 +10,6 @@ const adminRoutes = require("./admin.routes");
 router.use("/auth", authRoutes);
 router.use("/doctor", authenticate, doctorRoutes);
 router.use("/pharma", authenticate, pharmaRoutes);
-router.use("/admin", authenticate, adminRoutes);
+router.use("/admin", authenticate, authorizeRoles("ADMIN"), adminRoutes);
 
 module.exports = router;

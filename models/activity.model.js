@@ -30,9 +30,21 @@ const getDoctorViewCount = async (doctorProfileId) => {
 //GET RECENT DOCTOR PROFILE VIEWS
 const getRecentViews = async (limit = 10) => {
   const query = `
-    SELECT pv.*, u.name AS viewer_name
+    SELECT 
+      pv.*,
+      u.name AS viewer_name,
+      duser.name AS doctor_name
     FROM profile_views pv
-    LEFT JOIN users u ON pv.viewer_user_id = u.id
+
+    LEFT JOIN users u 
+      ON pv.viewer_user_id = u.id
+
+    LEFT JOIN doctor_profiles dp 
+      ON pv.doctor_profile_id = dp.id
+
+    LEFT JOIN users duser 
+      ON dp.user_id = duser.id
+
     ORDER BY pv.viewed_at DESC
     LIMIT $1;
   `;
@@ -45,9 +57,21 @@ const getRecentViews = async (limit = 10) => {
 //MOST VIEWED DOCTORS
 const getMostViewedDoctors = async (limit = 10) => {
   const query = `
-    SELECT doctor_profile_id, COUNT(*) AS views
-    FROM profile_views
-    GROUP BY doctor_profile_id
+    SELECT 
+      pv.doctor_profile_id,
+      COUNT(*) AS views,
+      u.name AS doctor_name
+
+    FROM profile_views pv
+
+    JOIN doctor_profiles dp 
+      ON pv.doctor_profile_id = dp.id
+
+    JOIN users u 
+      ON dp.user_id = u.id
+
+    GROUP BY pv.doctor_profile_id, u.name
+
     ORDER BY views DESC
     LIMIT $1;
   `;
@@ -55,7 +79,6 @@ const getMostViewedDoctors = async (limit = 10) => {
   const result = await pool.query(query, [limit]);
   return result.rows;
 };
-
 
 //VIEWS BY DATE (FOR GRAPH)
 const getViewsByDate = async () => {

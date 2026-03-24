@@ -15,7 +15,6 @@ const createDoctorProfile = async (userId) => {
 }
 
 const updateDoctorProfile = async (userId, data) => {
-
     //Get existing profile
     const existingQuery = `
         SELECT * FROM doctor_profiles WHERE user_id = $1

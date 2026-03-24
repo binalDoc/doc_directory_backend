@@ -103,8 +103,6 @@ const getDoctorProfileById = async (req, res) => {
         const viewerId = req.user.id; // pharma/admin
         const doctorId = req.params.id;
 
-        console.log(String(viewerId) !== String(doctorId))
-
         const doctorProfile = await doctorModel.getDoctorProfileById(doctorId);
 
         if (!doctorProfile) return res.status(404).json({ message: "Doctor Profile does not exist" });
