@@ -34,7 +34,8 @@ const config = {
         cloudName : envVars.CLOUDINARY_CLOUD_NAME,
         apiKey : envVars.CLOUDINARY_API_KEY,
         apiSecret : envVars.CLOUDINARY_API_SECRET
-    }
+    },
+    nmc_doc_verification_api: envVars.NMC_DOCTOR_VERIFICATION_API
     // asset_storage: envVars.ASSET_STORAGE,
     // AWS_S3: {
     //     access_key: envVars.S3_PUBLIC_BUCKET_ACCESS_KEY,

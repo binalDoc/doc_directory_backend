@@ -1,3 +1,22 @@
+CREATE TABLE countries (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100),
+  code VARCHAR(100),
+  dial_code VARCHAR(100)
+);
+
+CREATE TABLE states (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100),
+  country_id INT REFERENCES countries(id)
+);
+
+CREATE TABLE cities (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100),
+  state_id INT REFERENCES states(id)
+);
+
 -- USERS TABLE
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -5,6 +24,9 @@ CREATE TABLE users (
     email VARCHAR(100) UNIQUE NOT NULL,
     password TEXT NOT NULL,
     role VARCHAR(20) CHECK(role IN ('DOCTOR' , 'PHARMA', 'ADMIN')) NOT NULL,
+    country_id INTEGER UNIQUE REFERENCES countries(id) ON DELETE CASCADE,
+    state_id INTEGER UNIQUE REFERENCES states(id) ON DELETE CASCADE,
+    city_id INTEGER UNIQUE REFERENCES cities(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -20,8 +42,6 @@ CREATE TABLE doctor_profiles (
     qualification VARCHAR(100),
     experience INTEGER,
     hospital  VARCHAR(200),
-    city VARCHAR(100),
-    state VARCHAR(100),
     profile_image_url TEXT, 
     status VARCHAR(20) CHECK(status IN ('VERIFIED' , 'PENDING', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -62,6 +82,9 @@ CREATE INDEX idx_doctor_verified ON doctor_profiles(created_at DESC) WHERE statu
 -- Combined filter (city + specialty + experience)
 CREATE INDEX idx_doctor_city_specialty_experience 
 ON doctor_profiles(city, specialty, experience);
+
+CREATE INDEX idx_states_country_id ON states(country_id);
+CREATE INDEX idx_cities_state_id ON cities(state_id);
 
 
 -- PHARMA PROFILES INDEXES

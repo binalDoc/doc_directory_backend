@@ -21,7 +21,7 @@ const updatePharmaProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const { name, email, ...profileData } = req.body;
+        const { name, email, state_id, city_id, ...profileData } = req.body;
 
         if (email) {
             const existing = await userModel.getUserByEmail(email);
@@ -33,7 +33,7 @@ const updatePharmaProfile = async (req, res) => {
         let updatedUser = await userModel.getUserById(userId);
 
         if (name || email) {
-            updatedUser = await userModel.updateUser(userId, { name, email });
+            updatedUser = await userModel.updateUser(userId, { name, email, country_id, state_id, city_id });
         }
 
         const updatedProfile = await pharmaModel.updatePharmaProfile(

@@ -32,7 +32,7 @@ const updateDoctorProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const { name, email, ...profileData } = req.body;
+        const { name, email, country_id, state_id, city_id, ...rest } = req.body;
 
         if (email) {
             const existing = await userModel.getUserByEmail(email);
@@ -44,7 +44,12 @@ const updateDoctorProfile = async (req, res) => {
         let updatedUser = await userModel.getUserById(userId);
 
         if (name || email) {
-            updatedUser = await userModel.updateUser(userId, { name, email });
+            updatedUser = await userModel.updateUser(userId, { name, email, country_id, state_id, city_id });
+        }
+
+        let profileData = {
+           ...updatedUser,
+           ...rest
         }
 
         const updatedProfile = await doctorModel.updateDoctorProfile(

@@ -1,108 +1,129 @@
 const pool = require("../config/db/db");
-const {calculateDoctorProfileCompletion} = require("../utils/helper")
-// Create empty doctor profile (on signup)
-const createDoctorProfile = async (userId) => {
+const { calculateDoctorProfileCompletion, verifyDoctorFromNMC } = require("../utils/helper");
+
+const createDoctorProfile = async (userId, client = null) => {
+    const db = client || pool;
     const query = `
-    INSERT INTO doctor_profiles (user_id) 
-    VALUES ($1)
-    RETURNING *;
+        INSERT INTO doctor_profiles (user_id) 
+        VALUES ($1)
+        RETURNING *;
     `;
-
-    const values = [userId];
-
-    const result = await pool.query(query, values);
+    const result = await db.query(query, [userId]);
     return result.rows[0];
-}
+};
 
-const updateDoctorProfile = async (userId, data) => {
-    //Get existing profile
-    const existingQuery = `
-        SELECT * FROM doctor_profiles WHERE user_id = $1
-    `;
-    const existingRes = await pool.query(existingQuery, [userId]);
+const updateDoctorProfile = async (userId, data, client = null) => {
+    const db = client || pool;
+
+    const existingRes = await db.query(`SELECT * FROM doctor_profiles WHERE user_id = $1`, [userId]);
     const existing = existingRes.rows[0];
 
-    //Merge old + new data
-    const updatedData = {
-        ...existing,
-        ...data
-    };
+    const updatedData = { ...existing, ...data };
 
-    // Check if any important field changed
-    const fieldsToCheck = [
-        "experience",
-        "registration_number",
-        "registration_year",
-        "state_medical_council"
-    ];
+    let status = existing.status;
 
-    const isChanged = fieldsToCheck.some(
-        (field) => existing[field] !== updatedData[field]
-    );
+    const keyFields = ["name", "registration_number", "state_medical_council", "registration_year"];
+    let isKeyFieldPresent = true;
 
-    // Decide status
-    const status = isChanged ? "PENDING" : existing.status;
+    for (let key of keyFields) {
+        const val = updatedData[key];
+        if (!val || String(val).trim() === "") {
+            isKeyFieldPresent = false;
+            break;
+        }
+    }
 
-    // Update query
+    if (isKeyFieldPresent) {
+        try {
+            const isVerified = await verifyDoctorFromNMC(updatedData);
+            status = isVerified ? "VERIFIED" : "REJECTED";
+        } catch (error) {
+            console.error("Verification failed:", error.message);
+            status = "PENDING";
+        }
+    } else status = "PENDING";
+
     const query = `
         UPDATE doctor_profiles SET
-            specialty=$1,
-            bio=$2,
-            qualification=$3,
-            experience=$4,
-            hospital=$5,
-            city=$6,
-            state=$7,
-            profile_image_url=$8,
-            registration_number=$9,
-            registration_year=$10,
-            state_medical_council=$11,
-            status=$12
-        WHERE user_id=$13
+            specialty             = $1,
+            bio                   = $2,
+            qualification         = $3,
+            experience            = $4,
+            hospital              = $5,
+            profile_image_url     = $6,
+            registration_number   = $7,
+            registration_year     = $8,
+            state_medical_council = $9,
+            status                = $10
+        WHERE user_id = $11
         RETURNING *;
     `;
 
     const values = [
-        updatedData.specialty,
-        updatedData.bio,
-        updatedData.qualification,
-        updatedData.experience,
-        updatedData.hospital,
-        updatedData.city,
-        updatedData.state,
-        updatedData.profile_image_url,
-        updatedData.registration_number,
-        updatedData.registration_year,
-        updatedData.state_medical_council,
+        updatedData.specialty || null,
+        updatedData.bio || null,
+        updatedData.qualification || null,
+        parseInt(updatedData.experience) || null,
+        updatedData.hospital || null,
+        updatedData.profile_image_url || null,
+        updatedData.registration_number || null,
+        parseInt(updatedData.registration_year) || null,
+        updatedData.state_medical_council || null,
         status,
         userId
     ];
 
-    const result = await pool.query(query, values);
+    const result = await db.query(query, values);
     return result.rows[0];
 };
 
 const getDoctorProfileById = async (id) => {
     const query = `
-    SELECT * FROM doctor_profiles WHERE id = $1;
+        SELECT 
+            dp.*,
+            u.name,
+            u.email,
+            u.country_id,
+            u.state_id,
+            u.city_id,
+            co.name AS country_name,
+            co.code AS country_code,
+            st.name AS state_name,
+            ci.name AS city_name
+        FROM doctor_profiles dp
+        JOIN  users      u  ON dp.user_id    = u.id
+        LEFT JOIN countries co ON u.country_id = co.id
+        LEFT JOIN states    st ON u.state_id   = st.id
+        LEFT JOIN cities    ci ON u.city_id    = ci.id
+        WHERE dp.id = $1;
     `;
-
-    const values = [id];
-
-    const result = await pool.query(query, values);
+    const result = await pool.query(query, [id]);
     return result.rows[0];
-}
+};
 
 const getDoctorProfileByUserId = async (user_id) => {
     const query = `
-    SELECT * FROM doctor_profiles WHERE user_id = $1;
+        SELECT 
+            dp.*,
+            u.name,
+            u.email,
+            u.country_id,
+            u.state_id,
+            u.city_id,
+            co.name AS country_name,
+            co.code AS country_code,
+            st.name AS state_name,
+            ci.name AS city_name
+        FROM doctor_profiles dp
+        JOIN  users      u  ON dp.user_id    = u.id
+        LEFT JOIN countries co ON u.country_id = co.id
+        LEFT JOIN states    st ON u.state_id   = st.id
+        LEFT JOIN cities    ci ON u.city_id    = ci.id
+        WHERE dp.user_id = $1;
     `;
-
-    const values = [user_id];
-
-    const result = await pool.query(query, values);
+    const result = await pool.query(query, [user_id]);
     return result.rows[0];
-}
+};
 
 const getDoctors = async (filters) => {
     const {
@@ -112,6 +133,7 @@ const getDoctors = async (filters) => {
         specialty,
         city,
         state,
+        country,
         name,
         minExperience,
         sortBy,
@@ -119,16 +141,28 @@ const getDoctors = async (filters) => {
     } = filters;
 
     let query = `
-        SELECT dp.*, u.name, u.email
+        SELECT 
+            dp.*,
+            u.name,
+            u.email,
+            u.country_id,
+            u.state_id,
+            u.city_id,
+            co.name AS country_name,
+            co.code AS country_code,
+            st.name AS state_name,
+            ci.name AS city_name
         FROM doctor_profiles dp
-        JOIN users u ON dp.user_id = u.id
+        JOIN  users      u  ON dp.user_id    = u.id
+        LEFT JOIN countries co ON u.country_id = co.id
+        LEFT JOIN states    st ON u.state_id   = st.id
+        LEFT JOIN cities    ci ON u.city_id    = ci.id
         WHERE 1=1
     `;
 
     let values = [];
     let index = 1;
 
-    //STATUS FILTER (main difference)
     if (status) {
         query += ` AND dp.status = $${index++}`;
         values.push(status);
@@ -140,13 +174,18 @@ const getDoctors = async (filters) => {
     }
 
     if (city) {
-        query += ` AND dp.city ILIKE $${index++}`;
+        query += ` AND ci.name ILIKE $${index++}`;
         values.push(`%${city}%`);
     }
 
     if (state) {
-        query += ` AND dp.state ILIKE $${index++}`;
+        query += ` AND st.name ILIKE $${index++}`;
         values.push(`%${state}%`);
+    }
+
+    if (country) {
+        query += ` AND co.name ILIKE $${index++}`;
+        values.push(`%${country}%`);
     }
 
     if (name) {
@@ -156,36 +195,31 @@ const getDoctors = async (filters) => {
 
     if (minExperience) {
         query += ` AND dp.experience >= $${index++}`;
-        values.push(minExperience);
+        values.push(Number(minExperience));
     }
 
-    //SAFE SORT
-    const allowedSortFields = ["created_at", "experience", "name"];
+    const sortMap = {
+        created_at: "dp.created_at",
+        experience: "dp.experience",
+        name: "u.name"
+    };
     const allowedOrder = ["ASC", "DESC"];
 
-    const safeSortBy = allowedSortFields.includes(sortBy)
-        ? sortBy
-        : "created_at";
-
-    const safeOrder = allowedOrder.includes((order || "").toUpperCase())
-        ? order.toUpperCase()
-        : "DESC";
+    const safeSortBy = sortMap[sortBy] || "dp.created_at";
+    const safeOrder = allowedOrder.includes((order || "").toUpperCase()) ? order.toUpperCase() : "DESC";
 
     query += ` ORDER BY ${safeSortBy} ${safeOrder}`;
 
-    //PAGINATION
     const offset = (page - 1) * limit;
     query += ` LIMIT $${index++} OFFSET $${index++}`;
-    values.push(limit, offset);
+    values.push(Number(limit), offset);
 
     const result = await pool.query(query, values);
 
-    const doctorListWithProfileCompletionPercentage = result.rows.map((doctor) => {
-        return {
-            ...doctor,
-            completionPercentage: calculateDoctorProfileCompletion(doctor)
-        };
-    });
+    const doctorListWithProfileCompletionPercentage = result.rows.map((doctor) => ({
+        ...doctor,
+        completionPercentage: calculateDoctorProfileCompletion(doctor)
+    }));
 
     return {
         page: Number(page),
@@ -196,12 +230,11 @@ const getDoctors = async (filters) => {
 
 const updateDoctorStatus = async (id, status) => {
     const query = `
-    UPDATE doctor_profiles
-    SET status = $1
-    WHERE id = $2
-    RETURNING *
-  `;
-
+        UPDATE doctor_profiles
+        SET status = $1
+        WHERE id = $2
+        RETURNING *;
+    `;
     const result = await pool.query(query, [status, id]);
     return result.rows[0];
 };
@@ -215,13 +248,7 @@ const getDoctorStatusCounts = async () => {
 
     const result = await pool.query(query);
 
-    const counts = {
-        ALL: 0,
-        PENDING: 0,
-        VERIFIED: 0,
-        REJECTED: 0
-    };
-
+    const counts = { ALL: 0, PENDING: 0, VERIFIED: 0, REJECTED: 0 };
     result.rows.forEach(row => {
         counts[row.status] = Number(row.count);
         counts.ALL += Number(row.count);
@@ -238,4 +265,4 @@ module.exports = {
     getDoctors,
     updateDoctorStatus,
     getDoctorStatusCounts
-}
+};

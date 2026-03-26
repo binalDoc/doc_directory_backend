@@ -7,7 +7,7 @@ const activityModel = require("../models/activity.model");
 
 const createUserByAdmin = async (req, res) => {
     try {
-        const { name, email, password, role, ...profileData } = req.body;
+        const { name, email, password, role, country_id, state_id, city_id, ...profileData } = req.body;
 
         //Check email
         const existing = await userModel.getUserByEmail(email);
@@ -23,7 +23,10 @@ const createUserByAdmin = async (req, res) => {
             name,
             email,
             hashedPassword,
-            role
+            role,
+            country_id, 
+            state_id, 
+            city_id
         });
 
         let profile = null;
@@ -63,51 +66,44 @@ const createUserByAdmin = async (req, res) => {
 const updateUserByAdmin = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, email, ...profileData } = req.body;
+        const { name, email, country_id, state_id, city_id, ...rest } = req.body;
 
-        //Get existing user
+        const toIntOrNull = (val) => {
+            const parsed = parseInt(val);
+            return isNaN(parsed) ? null : parsed;
+        };
+
         const existingUser = await userModel.getUserById(id);
         if (!existingUser) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        //Update user
         const updatedUser = await userModel.updateUser(id, {
             name,
-            email
+            email,
+            country_id: toIntOrNull(country_id),
+            state_id:   toIntOrNull(state_id),
+            city_id:    toIntOrNull(city_id),
         });
 
         let profile = null;
+        let profileData = { ...updatedUser, ...rest };
 
-        console.log(profileData)
-
-        //Update role-based profile
         if (existingUser.role === "DOCTOR") {
-            profile = await doctorModel.updateDoctorProfile(
-                id,
-                profileData || {}
-            );
+            profile = await doctorModel.updateDoctorProfile(id, profileData || {});
         }
 
         if (existingUser.role === "PHARMA") {
-            profile = await pharmaModel.updatePharmaProfile(
-                id,
-                profileData || {}
-            );
+            profile = await pharmaModel.updatePharmaProfile(id, profileData || {});
         }
 
         return res.status(200).json({
             message: "User updated successfully",
-            result: {
-                ...updatedUser,
-                ...profile
-            }
+            result: { ...updatedUser, ...profile }
         });
 
     } catch (error) {
-        return res.status(500).json({
-            message: error?.message || error
-        });
+        return res.status(500).json({ message: error?.message || error });
     }
 };
 
@@ -153,42 +149,67 @@ const uploadBulkDoctors = async (req, res) => {
         const success = [];
         const failed = [];
 
-        for (let i = 0; i < data.length; i++) {
-            const row = data[i];
-            try {
-                if (!row.name || !row.email || !row.password) throw new Error("Missing required fileds");
+        const client = await pool.connect(); //transaction
 
-                const hashedPassword = await bcrypt.hash(row.password, 10);
+        try {
+            for (let i = 0; i < data.length; i++) {
+                const row = data[i];
 
-                const existing = await userModel.getUserByEmail(row.email);
-                if (existing) throw new Error("Email already exists");
+                try {
+                    await client.query("BEGIN");
 
-                const user = await userModel.createUser({
-                    name: row.name,
-                    email: row.email,
-                    hashedPassword,
-                    role: "DOCTOR"
-                });
+                    const requiredFields = ["name", "email", "password", "specialty", "registration_number", "registration_year"];
 
-                await doctorModel.createDoctorProfile(user.id);
+                    for (const field of requiredFields) {
+                        if (!row[field] || String(row[field]).trim() === "") throw new Error(`${field} is required`);
+                    }
 
-                await doctorModel.updateDoctorProfile(user.id, {
-                    specialty: row.specialty,
-                    experience: Number(row.experience),
-                    city: row.city,
-                    state: row.state,
-                    registration_number: row.registration_number,
-                    registration_year: Number(row.registration_year),
-                });
+                    if (row.experience && isNaN(Number(row.experience))) throw new Error("Invalid experience");
 
-                success.push({ row: i + 1, email: row.email });
-            } catch (err) {
-                failed.push({
-                    row: i + 1,
-                    email: row.email,
-                    error: err.message
-                })
+                    const year = Number(row.registration_year);
+                    if (!Number.isInteger(year) || year < 1950 || year > new Date().getFullYear()) {
+                        throw new Error("Invalid registration year");
+                    }
+                    row.email = row.email?.trim().toLowerCase();
+                    if (!/\S+@\S+\.\S+/.test(row.email)) throw new Error("Invalid email format");
+
+                    const hashedPassword = await bcrypt.hash(row.password, 10);
+
+                    const existing = await userModel.getUserByEmail(row.email, client);
+                    if (existing) throw new Error("Email already exists");
+
+                    const user = await userModel.createUser({
+                        name: row.name,
+                        email: row.email,
+                        hashedPassword,
+                        role: "DOCTOR"
+                    }, client);
+
+                    await doctorModel.createDoctorProfile(user.id, client);
+
+                    await doctorModel.updateDoctorProfile(user.id, {
+                        specialty: row.specialty,
+                        experience: Number(row.experience),
+                        city: row.city,
+                        state: row.state,
+                        registration_number: row.registration_number,
+                        registration_year: Number(row.registration_year),
+                    }, client);
+
+                    await client.query("COMMIT");
+
+                    success.push({ row: i + 1, email: row.email });
+                } catch (err) {
+                    await client.query("ROLLBACK");
+                    failed.push({
+                        row: i + 1,
+                        email: row.email,
+                        error: err.message
+                    })
+                }
             }
+        } finally {
+            client.release();
         }
 
         return res.status(201).json({
@@ -205,91 +226,91 @@ const uploadBulkDoctors = async (req, res) => {
 }
 
 const getProfileViewAnalyticsDashboard = async (req, res) => {
-  try {
-    const { limit = 10 } = req.query;
+    try {
+        const { limit = 10 } = req.query;
 
-    const [recentViews, topDoctors, graph] = await Promise.all([
-      activityModel.getRecentViews(limit),
-      activityModel.getMostViewedDoctors(limit),
-      activityModel.getViewsByDate()
-    ]);
+        const [recentViews, topDoctors, graph] = await Promise.all([
+            activityModel.getRecentViews(limit),
+            activityModel.getMostViewedDoctors(limit),
+            activityModel.getViewsByDate()
+        ]);
 
-    return res.status(200).json({
-      result: {
-        recentViews,
-        topDoctors,
-        graph
-      }
-    });
+        return res.status(200).json({
+            result: {
+                recentViews,
+                topDoctors,
+                graph
+            }
+        });
 
-  } catch (error) {
-    return res.status(500).json({
-      message: error?.message || error
-    });
-  }
+    } catch (error) {
+        return res.status(500).json({
+            message: error?.message || error
+        });
+    }
 };
 
 const getDoctorViewCount = async (req, res) => {
-  try {
-    const { doctorId } = req.params;
+    try {
+        const { doctorId } = req.params;
 
-    const totalViews = await activityModel.getDoctorViewCount(doctorId);
+        const totalViews = await activityModel.getDoctorViewCount(doctorId);
 
-    return res.status(200).json({
-      result: {
-        doctorId,
-        totalViews
-      }
-    });
+        return res.status(200).json({
+            result: {
+                doctorId,
+                totalViews
+            }
+        });
 
-  } catch (error) {
-    return res.status(500).json({
-      message: error?.message || error
-    });
-  }
+    } catch (error) {
+        return res.status(500).json({
+            message: error?.message || error
+        });
+    }
 };
 
 const getRecentViews = async (req, res) => {
-  try {
-    const { limit = 10 } = req.query;
+    try {
+        const { limit = 10 } = req.query;
 
-    const result = await activityModel.getRecentViews(limit);
+        const result = await activityModel.getRecentViews(limit);
 
-    return res.status(200).json({ result });
+        return res.status(200).json({ result });
 
-  } catch (error) {
-    return res.status(500).json({
-      message: error?.message || error
-    });
-  }
+    } catch (error) {
+        return res.status(500).json({
+            message: error?.message || error
+        });
+    }
 };
 
 const getMostViewedDoctors = async (req, res) => {
-  try {
-    const { limit = 10 } = req.query;
+    try {
+        const { limit = 10 } = req.query;
 
-    const result = await activityModel.getMostViewedDoctors(limit);
+        const result = await activityModel.getMostViewedDoctors(limit);
 
-    return res.status(200).json({ result });
+        return res.status(200).json({ result });
 
-  } catch (error) {
-    return res.status(500).json({
-      message: error?.message || error
-    });
-  }
+    } catch (error) {
+        return res.status(500).json({
+            message: error?.message || error
+        });
+    }
 };
 
 const getViewsByDate = async (req, res) => {
-  try {
-    const result = await activityModel.getViewsByDate();
+    try {
+        const result = await activityModel.getViewsByDate();
 
-    return res.status(200).json({ result });
+        return res.status(200).json({ result });
 
-  } catch (error) {
-    return res.status(500).json({
-      message: error?.message || error
-    });
-  }
+    } catch (error) {
+        return res.status(500).json({
+            message: error?.message || error
+        });
+    }
 };
 
 module.exports = {

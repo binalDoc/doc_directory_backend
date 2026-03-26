@@ -16,7 +16,7 @@ const registerUser = async (req, res) => {
         const { error, value } = registerUserSchema.validate(req.body);
         if (error) return res.status(400).json({ message: error.details[0].message });
 
-        const { name, email, password, role, verificationCode, company_name } = value;
+        const { name, email, password, role, country_id, state_id, city_id, verificationCode, company_name } = value;
 
         const pharmaCodes = config.pharma_codes;
         if (role === "PHARMA") {
@@ -31,7 +31,7 @@ const registerUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         //new user create
-        const user = await userModel.createUser({ name, email, hashedPassword, role });
+        const user = await userModel.createUser({ name, email, hashedPassword, role, country_id, state_id, city_id });
 
         //role based profile create
         if (role === "DOCTOR") await doctorModel.createDoctorProfile(user.id);
@@ -41,9 +41,14 @@ const registerUser = async (req, res) => {
         const token = generateJWTToken(user);
         delete user.password;
 
+        let userData = {};
+
+        if (user?.role === "DOCTOR") userData = await doctorModel.getDoctorProfileByUserId(user.id);
+        else if (user?.role === "PHARMA") userData = await pharmaModel.getPharmaProfileById(user.id);
+
         return res.status(201).json({
             message: "Registeration successful",
-            user,
+            user: { ...userData, ...user },
             token
         });
     } catch (error) {
