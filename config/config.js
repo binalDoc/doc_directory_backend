@@ -9,6 +9,15 @@ const envVarsSchema = Joi.object({
         .description('POSTGRESQL DB host url'),
     JWT_SECRET: Joi.string().required()
         .description('JWT Secret required to sign'),
+    NMC_DOCTOR_VERIFICATION_API: Joi.string().required()
+        .description('NMC vrification api is required to sign'),
+    CLOUDINARY_CLOUD_NAME: Joi.string().required()
+        .description('Cloudinary clound name is required'),
+    CLOUDINARY_API_KEY: Joi.string().required()
+        .description('Cloudinary api key is required'),
+    CLOUDINARY_API_SECRET: Joi.string().required()
+        .description('Cloudinary api secret is required'),
+    
     // WASABI_PUBLIC_BUCKET_ACCESS_KEY: Joi.string().required(),
     // WASABI_PUBLIC_BUCKET_SECRET_KEY: Joi.string().required(),
     // WASABI_PUBLIC_BUCKET_REGION: Joi.string().required(),
@@ -30,10 +39,10 @@ const config = {
     jwtSecret: envVars.JWT_SECRET,
     jwtUserExpire: envVars.JWT_USER_EXPIRE,
     pharma_codes: envVars.PHARMA_CODES,
-    cloudinary : {
-        cloudName : envVars.CLOUDINARY_CLOUD_NAME,
-        apiKey : envVars.CLOUDINARY_API_KEY,
-        apiSecret : envVars.CLOUDINARY_API_SECRET
+    cloudinary: {
+        cloudName: envVars.CLOUDINARY_CLOUD_NAME,
+        apiKey: envVars.CLOUDINARY_API_KEY,
+        apiSecret: envVars.CLOUDINARY_API_SECRET
     },
     nmc_doc_verification_api: envVars.NMC_DOCTOR_VERIFICATION_API
     // asset_storage: envVars.ASSET_STORAGE,

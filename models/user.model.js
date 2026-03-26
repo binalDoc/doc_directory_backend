@@ -1,15 +1,31 @@
 const pool = require("../config/db/db");
 
-const createUser = async ({ name, email, hashedPassword, role, country_id = null, state_id = null, city_id = null }, client = null) => {
+const createUser = async (
+  { name, email, hashedPassword, role, country_id = null, state_id = null, city_id = null },
+  client = null
+) => {
   const db = client || pool;
 
   const query = `
-    INSERT INTO users (name, email, password, role, country_id, state_id, city_id) 
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING id, name, email, role, created_at;
+    WITH inserted_user AS (
+      INSERT INTO users (name, email, password, role, country_id, state_id, city_id) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    )
+    SELECT 
+      u.id, u.name, u.email, u.role, u.created_at,
+      u.country_id, u.state_id, u.city_id,
+      co.name AS country_name,
+      co.code AS country_code,
+      st.name AS state_name,
+      ci.name AS city_name
+    FROM inserted_user u
+    LEFT JOIN countries co ON u.country_id = co.id
+    LEFT JOIN states st ON u.state_id = st.id
+    LEFT JOIN cities ci ON u.city_id = ci.id;
   `;
 
-  const values = [name, email, hashedPassword, role, country_id || null, state_id || null, city_id || null];
+  const values = [name, email, hashedPassword, role, country_id, state_id, city_id];
 
   const result = await db.query(query, values);
   return result.rows[0];
@@ -19,17 +35,37 @@ const updateUser = async (userId, data) => {
   const { name, email, country_id, state_id, city_id } = data;
 
   const query = `
-    UPDATE users
-    SET name       = COALESCE($1, name),
-        email      = COALESCE($2, email),
-        country_id = COALESCE($3, country_id),
-        state_id   = COALESCE($4, state_id),
-        city_id    = COALESCE($5, city_id)
-    WHERE id = $6
-    RETURNING id, name, email, role, country_id, state_id, city_id;
+    WITH updated_user AS (
+      UPDATE users
+      SET name       = COALESCE($1, name),
+          email      = COALESCE($2, email),
+          country_id = COALESCE($3, country_id),
+          state_id   = COALESCE($4, state_id),
+          city_id    = COALESCE($5, city_id)
+      WHERE id = $6
+      RETURNING *
+    )
+    SELECT 
+      u.id, u.name, u.email, u.role,
+      u.country_id, u.state_id, u.city_id,
+      co.name AS country_name,
+      co.code AS country_code,
+      st.name AS state_name,
+      ci.name AS city_name
+    FROM updated_user u
+    LEFT JOIN countries co ON u.country_id = co.id
+    LEFT JOIN states st ON u.state_id = st.id
+    LEFT JOIN cities ci ON u.city_id = ci.id;
   `;
 
-  const values = [name || null, email || null, country_id || null, state_id || null, city_id || null, userId];
+  const values = [
+    name || null,
+    email || null,
+    country_id || null,
+    state_id || null,
+    city_id || null,
+    userId
+  ];
 
   const result = await pool.query(query, values);
   return result.rows[0];

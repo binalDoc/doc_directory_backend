@@ -21,7 +21,7 @@ const updatePharmaProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const { name, email, state_id, city_id, ...profileData } = req.body;
+        const { name, email, country_id, state_id, city_id, ...profileData } = req.body;
 
         if (email) {
             const existing = await userModel.getUserByEmail(email);
