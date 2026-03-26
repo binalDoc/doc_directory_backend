@@ -36,6 +36,7 @@ const updateDoctorProfile = async (userId, data, client = null) => {
     if (isKeyFieldPresent) {
         try {
             const isVerified = await verifyDoctorFromNMC(updatedData);
+            console.log(isVerified)
             status = isVerified ? "VERIFIED" : "REJECTED";
         } catch (error) {
             console.error("Verification failed:", error.message);
