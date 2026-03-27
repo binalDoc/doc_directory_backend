@@ -41,6 +41,8 @@ const updateDoctorProfile = async (userId, data, client = null) => {
         (key) => updatedData[key] && String(updatedData[key]).trim() !== ""
     );
 
+    let status = existing.status;
+
     if (isReadyForVerification) {
         const isKeyFieldChanged = keyFields.some(
             (field) =>
@@ -49,6 +51,7 @@ const updateDoctorProfile = async (userId, data, client = null) => {
         );
 
         if (isKeyFieldChanged) {
+            status = "PENDING"
             try {
                 console.log("NMC API called")
                 const isVerified = await verifyDoctorFromNMC(updatedData);
@@ -73,8 +76,9 @@ const updateDoctorProfile = async (userId, data, client = null) => {
             registration_number   = $7,
             registration_year     = $8,
             state_medical_council = $9,
-            nmc_verified          = $10
-        WHERE user_id = $11
+            nmc_verified          = $10,
+            status                = $11
+        WHERE user_id = $12
         RETURNING *;
     `;
 
@@ -89,6 +93,7 @@ const updateDoctorProfile = async (userId, data, client = null) => {
         parseInt(updatedData.registration_year) || null,
         updatedData.state_medical_council || null,
         nmc_verified,
+        status,
         userId
     ];
 
