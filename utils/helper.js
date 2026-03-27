@@ -3,7 +3,7 @@ const axios = require("axios");
 const https = require("https");
 
 const calculateDoctorProfileCompletion = (profile) => {
-    const fields = ["specialty", "bio", "qualification", "experience", "hospital", "city", "state", "profile_image_url", "registration_number", "registration_year", "state_medical_council"];
+    const fields = ["specialty", "bio", "qualification", "experience", "hospital", "country_id", "profile_image_url", "registration_number", "registration_year", "state_medical_council"];
 
     const filled = fields.filter((field) => profile[field]).length;
 

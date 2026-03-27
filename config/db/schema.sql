@@ -43,8 +43,10 @@ CREATE TABLE doctor_profiles (
     experience INTEGER,
     hospital  VARCHAR(200),
     profile_image_url TEXT, 
+    nmc_verified BOOLEAN DEFAULT FALSE,
     status VARCHAR(20) CHECK(status IN ('VERIFIED' , 'PENDING', 'REJECTED')) NOT NULL DEFAULT 'PENDING',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_reg_per_council UNIQUE (registration_number, state_medical_council)
 );
 
 -- PHARMA  PROFILE

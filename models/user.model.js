@@ -40,8 +40,15 @@ const updateUser = async (userId, data) => {
       SET name       = COALESCE($1, name),
           email      = COALESCE($2, email),
           country_id = COALESCE($3, country_id),
-          state_id   = COALESCE($4, state_id),
-          city_id    = COALESCE($5, city_id)
+          state_id = CASE 
+              WHEN $4::INTEGER IS NULL THEN NULL
+              ELSE COALESCE($4::INTEGER, state_id)
+          END,
+
+          city_id = CASE 
+              WHEN $5::INTEGER IS NULL THEN NULL
+              ELSE COALESCE($5::INTEGER, city_id)
+          END
       WHERE id = $6
       RETURNING *
     )

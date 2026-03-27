@@ -15,34 +15,52 @@ const createDoctorProfile = async (userId, client = null) => {
 const updateDoctorProfile = async (userId, data, client = null) => {
     const db = client || pool;
 
-    const existingRes = await db.query(`SELECT * FROM doctor_profiles WHERE user_id = $1`, [userId]);
+    const existingRes = await db.query(
+        `SELECT dp.*, u.name
+        FROM doctor_profiles dp
+        JOIN users u ON dp.user_id = u.id
+        WHERE dp.user_id = $1
+        `,
+        [userId]
+    );
+
     const existing = existingRes.rows[0];
 
     const updatedData = { ...existing, ...data };
 
-    let status = existing.status;
+    let nmc_verified = existing.nmc_verified;
 
-    const keyFields = ["name", "registration_number", "state_medical_council", "registration_year"];
-    let isKeyFieldPresent = true;
+    const keyFields = [
+        "name",
+        "registration_number",
+        "state_medical_council",
+        "registration_year"
+    ];
 
-    for (let key of keyFields) {
-        const val = updatedData[key];
-        if (!val || String(val).trim() === "") {
-            isKeyFieldPresent = false;
-            break;
+    const isReadyForVerification = keyFields.every(
+        (key) => updatedData[key] && String(updatedData[key]).trim() !== ""
+    );
+
+    if (isReadyForVerification) {
+        const isKeyFieldChanged = keyFields.some(
+            (field) =>
+                String(existing[field] || "").trim() !==
+                String(updatedData[field] || "").trim()
+        );
+
+        if (isKeyFieldChanged) {
+            try {
+                console.log("NMC API called")
+                const isVerified = await verifyDoctorFromNMC(updatedData);
+                nmc_verified = isVerified;
+            } catch (error) {
+                console.error("Verification failed:", error.message);
+                nmc_verified = false;
+            }
         }
+    } else {
+        nmc_verified = false;
     }
-
-    if (isKeyFieldPresent) {
-        try {
-            const isVerified = await verifyDoctorFromNMC(updatedData);
-            console.log(isVerified)
-            status = isVerified ? "VERIFIED" : "REJECTED";
-        } catch (error) {
-            console.error("Verification failed:", error.message);
-            status = "PENDING";
-        }
-    } else status = "PENDING";
 
     const query = `
         UPDATE doctor_profiles SET
@@ -55,7 +73,7 @@ const updateDoctorProfile = async (userId, data, client = null) => {
             registration_number   = $7,
             registration_year     = $8,
             state_medical_council = $9,
-            status                = $10
+            nmc_verified          = $10
         WHERE user_id = $11
         RETURNING *;
     `;
@@ -70,7 +88,7 @@ const updateDoctorProfile = async (userId, data, client = null) => {
         updatedData.registration_number || null,
         parseInt(updatedData.registration_year) || null,
         updatedData.state_medical_council || null,
-        status,
+        nmc_verified,
         userId
     ];
 
@@ -132,9 +150,9 @@ const getDoctors = async (filters) => {
         limit = 10,
         status,
         specialty,
-        city,
-        state,
-        country,
+        city_id,
+        state_id,
+        country_id,
         name,
         minExperience,
         sortBy,
@@ -174,19 +192,19 @@ const getDoctors = async (filters) => {
         values.push(`%${specialty}%`);
     }
 
-    if (city) {
-        query += ` AND ci.name ILIKE $${index++}`;
-        values.push(`%${city}%`);
+    if (city_id) {
+        query += ` AND u.city_id = $${index++}`;
+        values.push(Number(city_id));
     }
 
-    if (state) {
-        query += ` AND st.name ILIKE $${index++}`;
-        values.push(`%${state}%`);
+    if (state_id) {
+        query += ` AND u.state_id = $${index++}`;
+        values.push(Number(state_id));
     }
 
-    if (country) {
-        query += ` AND co.name ILIKE $${index++}`;
-        values.push(`%${country}%`);
+    if (country_id) {
+        query += ` AND u.country_id = $${index++}`;
+        values.push(Number(country_id));
     }
 
     if (name) {
@@ -230,6 +248,17 @@ const getDoctors = async (filters) => {
 };
 
 const updateDoctorStatus = async (id, status) => {
+    const existing = await pool.query(
+        `SELECT * FROM doctor_profiles WHERE id = $1`,
+        [id]
+    );
+
+    const doctor = existing.rows[0];
+
+    if (!doctor.nmc_verified && status === "VERIFIED") {
+        throw new Error("Cannot verify doctor without NMC verification");
+    }
+
     const query = `
         UPDATE doctor_profiles
         SET status = $1
