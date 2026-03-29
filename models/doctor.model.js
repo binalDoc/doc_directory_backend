@@ -149,7 +149,31 @@ const getDoctorProfileByUserId = async (user_id) => {
     return result.rows[0];
 };
 
-const getDoctors = async (filters) => {
+const logSearchAnalytics = async (filters, userId) => {
+    try {
+        const { name, specialty, country_id, state_id, city_id } = filters;
+
+        if (!name && !specialty && !country_id && !state_id && !city_id) return;
+
+        await pool.query(
+            `INSERT INTO search_analytics 
+       (name, specialty, country_id, state_id, city_id, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                name || null,
+                specialty || null,
+                country_id || null,
+                state_id || null,
+                city_id || null,
+                userId || null
+            ]
+        );
+    } catch (err) {
+        console.error("Analytics log failed", err);
+    }
+};
+
+const getDoctors = async (filters, userId) => {
     const {
         page = 1,
         limit = 10,
@@ -245,6 +269,8 @@ const getDoctors = async (filters) => {
         completionPercentage: calculateDoctorProfileCompletion(doctor)
     }));
 
+    await logSearchAnalytics(filters, userId);
+
     return {
         page: Number(page),
         limit: Number(limit),
@@ -292,6 +318,88 @@ const getDoctorStatusCounts = async () => {
     return counts;
 };
 
+const getDoctorsForExport = async (filters) => {
+    const {
+        status,
+        specialty,
+        city_id,
+        state_id,
+        country_id,
+        name,
+        minExperience,
+        sortBy,
+        order,
+    } = filters;
+
+    // Same query as getDoctors — just no LIMIT / OFFSET
+    let query = `
+        SELECT 
+            dp.*,
+            u.name,
+            u.email,
+            u.country_id,
+            u.state_id,
+            u.city_id,
+            co.name AS country_name,
+            co.code AS country_code,
+            st.name AS state_name,
+            ci.name AS city_name
+        FROM doctor_profiles dp
+        JOIN  users      u  ON dp.user_id    = u.id
+        LEFT JOIN countries co ON u.country_id = co.id
+        LEFT JOIN states    st ON u.state_id   = st.id
+        LEFT JOIN cities    ci ON u.city_id    = ci.id
+        WHERE 1=1
+    `;
+
+    let values = [];
+    let index = 1;
+
+    if (status) {
+        query += ` AND dp.status = $${index++}`;
+        values.push(status);
+    }
+
+    if (specialty) {
+        query += ` AND dp.specialty ILIKE $${index++}`;
+        values.push(`%${specialty}%`);
+    }
+    if (city_id) {
+        query += ` AND u.city_id = $${index++}`;
+        values.push(Number(city_id));
+    }
+    if (state_id) {
+        query += ` AND u.state_id = $${index++}`;
+        values.push(Number(state_id));
+    }
+    if (country_id) {
+        query += ` AND u.country_id = $${index++}`;
+        values.push(Number(country_id));
+    }
+    if (name) {
+        query += ` AND u.name ILIKE $${index++}`;
+        values.push(`%${name}%`);
+    }
+    if (minExperience) {
+        query += ` AND dp.experience >= $${index++}`;
+        values.push(Number(minExperience));
+    }
+
+    const sortMap = { created_at: "dp.created_at", experience: "dp.experience", name: "u.name" };
+    const allowedOrder = ["ASC", "DESC"];
+    const safeSortBy = sortMap[sortBy] || "dp.created_at";
+    const safeOrder = allowedOrder.includes((order || "").toUpperCase()) ? order.toUpperCase() : "DESC";
+
+    query += ` ORDER BY ${safeSortBy} ${safeOrder}`;
+
+    const result = await pool.query(query, values);
+
+    return result.rows.map((doctor) => ({
+        ...doctor,
+        completionPercentage: calculateDoctorProfileCompletion(doctor),
+    }));
+};
+
 module.exports = {
     createDoctorProfile,
     updateDoctorProfile,
@@ -299,5 +407,6 @@ module.exports = {
     getDoctorProfileByUserId,
     getDoctors,
     updateDoctorStatus,
-    getDoctorStatusCounts
+    getDoctorStatusCounts,
+    getDoctorsForExport
 };

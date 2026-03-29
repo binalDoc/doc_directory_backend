@@ -19,4 +19,9 @@ router.get("/recent-views", adminController.getRecentViews);
 router.get("/top-doctors", adminController.getMostViewedDoctors);
 router.get("/views-by-date", adminController.getViewsByDate);
 
+router.get("/search-analytics/summary", adminController.getSearchAnalyticsSummary);
+router.get("/search-analytics/top-searches", adminController.getTopSearchTerms);
+router.get("/search-analytics/recent", adminController.getRecentSearches);
+router.get("/search-analytics/by-date", adminController.getSearchesByDate);
+
 module.exports = router;

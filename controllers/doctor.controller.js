@@ -2,7 +2,7 @@ const path = require("path");
 const doctorModel = require("../models/doctor.model");
 const activityModel = require("../models/activity.model");
 const userModel = require("../models/user.model");
-
+const {createExcelWorkbook, addExcelWorksheet, setExcelResponseHeaders, sendExcelWorkbookAsDownload} = require("./export.controller");
 const { calculateDoctorProfileCompletion } = require("../utils/helper");
 
 //for doctor, self profile view
@@ -127,7 +127,8 @@ const getDoctorProfileById = async (req, res) => {
 
 const getDoctors = async (req, res) => {
     try {
-        const result = await doctorModel.getDoctors(req.query);
+        const userId = req.user.id;
+        const result = await doctorModel.getDoctors(req.query, userId);
         return res.status(200).json({ result });
     } catch (error) {
         return res.status(500).json({
@@ -168,6 +169,43 @@ const getDoctorStatusCounts = async (req, res) => {
         });
     }
 }
+
+const exportDoctors = async (req, res) => {
+    try {
+        const doctors = await doctorModel.getDoctorsForExport(req.query);
+ 
+        if (!doctors.length) {
+            return res.status(404).json({ message: "No doctors found to export" });
+        }
+ 
+        const exportData = doctors.map((d) => ({
+            Name:                    d.name,
+            Email:                   d.email,
+            Specialty:               d.specialty || "-",
+            Qualification:           d.qualification || "-",
+            Experience_Years:        Number(d.experience) || "-",
+            Hospital:                d.hospital || "-",
+            City:                    d.city_name || "-",
+            State:                   d.state_name || "-",
+            Country:                 d.country_name || "-",
+            Registration_Number:     d.registration_number || "-",
+            Registration_Year:       Number(d.registration_year) || "-",
+            State_Medical_Council:   d.state_medical_council || "-",
+            Status:                  d.status,
+            Profile_Completion:      `${d.completionPercentage}%`,
+            NMC_verified:            d.nmc_verified
+        }));
+ 
+        const workbook = createExcelWorkbook();
+        addExcelWorksheet(workbook, "Doctors", exportData);
+        setExcelResponseHeaders(res, `doctors_export_${Date.now()}`);
+        await sendExcelWorkbookAsDownload(res, workbook);
+ 
+    } catch (error) {
+        return res.status(500).json({ message: error?.message || error });
+    }
+};
+
 module.exports = {
     getDoctorProfile,
     updateDoctorProfile,
@@ -175,6 +213,7 @@ module.exports = {
     getDoctorProfileById,
     getDoctors,
     updateDoctorStatus,
-    getDoctorStatusCounts
+    getDoctorStatusCounts,
+    exportDoctors
 }
 

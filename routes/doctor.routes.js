@@ -6,6 +6,7 @@ const { authorizeRoles } = require("../middlewares/auth.middleware");
 
 const upload = require("../middlewares/upload.middleware");
 
+router.get("/export", authorizeRoles("PHARMA", "ADMIN"), doctorController.exportDoctors);
 router.get("/list", authorizeRoles("DOCTOR", "PHARMA", "ADMIN"), doctorController.getDoctors);
 router.get("/profile", authorizeRoles("DOCTOR"), doctorController.getDoctorProfile);
 router.patch("/profile", authorizeRoles("DOCTOR"), doctorController.updateDoctorProfile);

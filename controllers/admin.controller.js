@@ -313,6 +313,53 @@ const getViewsByDate = async (req, res) => {
     }
 };
 
+// GET /admin/search-analytics/summary
+// Returns: total searches, unique searchers, top specialty, most searched name
+const getSearchAnalyticsSummary = async (req, res) => {
+    try {
+        const data = await activityModel.getSearchAnalyticsSummary();
+        return res.status(200).json(data);
+    } catch (error) {
+        return res.status(500).json({ message: error?.message || error });
+    }
+};
+
+// GET /admin/search-analytics/top-searches?limit=10
+// Returns: top specialties, top names, top locations searched
+const getTopSearchTerms = async (req, res) => {
+    try {
+        const { limit = 10 } = req.query;
+        const data = await activityModel.getTopSearchTerms(Number(limit));
+        return res.status(200).json(data);
+    } catch (error) {
+        return res.status(500).json({ message: error?.message || error });
+    }
+};
+ 
+// GET /admin/search-analytics/recent?page=1&limit=20
+// Returns: raw paginated search log
+const getRecentSearches = async (req, res) => {
+    try {
+        const { page = 1, limit = 20 } = req.query;
+        const data = await activityModel.getRecentSearches(Number(page), Number(limit));
+        return res.status(200).json(data);
+    } catch (error) {
+        return res.status(500).json({ message: error?.message || error });
+    }
+};
+ 
+// GET /admin/search-analytics/by-date?days=14
+// Returns: daily search count for the last N days (for trend chart)
+const getSearchesByDate = async (req, res) => {
+    try {
+        const { days = 14 } = req.query;
+        const data = await activityModel.getSearchesByDate(Number(days));
+        return res.status(200).json(data);
+    } catch (error) {
+        return res.status(500).json({ message: error?.message || error });
+    }
+};
+
 module.exports = {
     createUserByAdmin,
     updateUserByAdmin,
@@ -323,5 +370,9 @@ module.exports = {
     getDoctorViewCount,
     getRecentViews,
     getMostViewedDoctors,
-    getViewsByDate
+    getViewsByDate,
+    getSearchAnalyticsSummary,
+    getTopSearchTerms,
+    getRecentSearches,
+    getSearchesByDate
 }

@@ -65,6 +65,17 @@ CREATE TABLE profile_views (
   viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE search_analytics (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    specialty TEXT,
+    country_id INT,
+    state_id INT,
+    city_id INT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    searched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- USERS TABLE INDEXES
 -- Fast lookup for login/signup
 CREATE UNIQUE INDEX idx_users_email ON users(email);
