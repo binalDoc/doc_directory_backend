@@ -186,6 +186,7 @@ const getDoctors = async (filters, userId) => {
         minExperience,
         sortBy,
         order,
+        nmc_verified
     } = filters;
 
     let query = `
@@ -214,6 +215,11 @@ const getDoctors = async (filters, userId) => {
     if (status) {
         query += ` AND dp.status = $${index++}`;
         values.push(status);
+    }
+
+    if (nmc_verified && nmc_verified==="true") {
+        query += ` AND dp.nmc_verified = $${index++}`;
+        values.push(nmc_verified);
     }
 
     if (specialty) {

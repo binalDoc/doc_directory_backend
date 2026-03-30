@@ -4,6 +4,8 @@ const userModel = require("../models/user.model")
 const doctorModel = require("../models/doctor.model")
 const pharmaModel = require("../models/pharma.model")
 const activityModel = require("../models/activity.model");
+const pool = require("../config/db/db");
+const { MSD_STATE_COUNCILS } = require("../utils/helper");
 
 const createUserByAdmin = async (req, res) => {
     try {
@@ -24,8 +26,8 @@ const createUserByAdmin = async (req, res) => {
             email,
             hashedPassword,
             role,
-            country_id, 
-            state_id, 
+            country_id,
+            state_id,
             city_id
         });
 
@@ -82,8 +84,8 @@ const updateUserByAdmin = async (req, res) => {
             name,
             email,
             country_id: toIntOrNull(country_id),
-            state_id:   toIntOrNull(state_id),
-            city_id:    toIntOrNull(city_id),
+            state_id: toIntOrNull(state_id),
+            city_id: toIntOrNull(city_id),
         });
 
         let profile = null;
@@ -137,11 +139,9 @@ const getAllUsers = async (req, res) => {
 
 const uploadBulkDoctors = async (req, res) => {
     try {
-
         const file = req.file;
         if (!file) return res.status(400).json({ message: "File is required" });
 
-        //parse excel file
         const workbook = XLSX.read(file.buffer, { type: "buffer" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(sheet);
@@ -149,7 +149,21 @@ const uploadBulkDoctors = async (req, res) => {
         const success = [];
         const failed = [];
 
-        const client = await pool.connect(); //transaction
+        const countriesResult = await pool.query(
+            `SELECT id, LOWER(TRIM(name)) AS name FROM countries`
+        );
+        const countryMap = {}; // { "india": 1, "usa": 2, ... }
+        countriesResult.rows.forEach((c) => {
+            countryMap[c.name] = c.id;
+        });
+
+        const VALID_STATE_COUNCILS = new Set(
+            MSD_STATE_COUNCILS
+                .filter(c => c.value !== 0)
+                .map(c => c.label.trim().toLowerCase())
+        );
+
+        const client = await pool.connect();
 
         try {
             for (let i = 0; i < data.length; i++) {
@@ -158,20 +172,43 @@ const uploadBulkDoctors = async (req, res) => {
                 try {
                     await client.query("BEGIN");
 
-                    const requiredFields = ["name", "email", "password", "specialty", "registration_number", "registration_year"];
-
+                    // Required field validation
+                    const requiredFields = [
+                        "name", "email", "password",
+                        "registration_number", "registration_year", "country"
+                    ];
                     for (const field of requiredFields) {
-                        if (!row[field] || String(row[field]).trim() === "") throw new Error(`${field} is required`);
+                        if (!row[field] || String(row[field]).trim() === "") {
+                            throw new Error(`${field} is required`);
+                        }
                     }
 
-                    if (row.experience && isNaN(Number(row.experience))) throw new Error("Invalid experience");
+                    if (row.experience && isNaN(Number(row.experience))) {
+                        throw new Error("Invalid experience");
+                    }
 
                     const year = Number(row.registration_year);
                     if (!Number.isInteger(year) || year < 1950 || year > new Date().getFullYear()) {
                         throw new Error("Invalid registration year");
                     }
+
                     row.email = row.email?.trim().toLowerCase();
                     if (!/\S+@\S+\.\S+/.test(row.email)) throw new Error("Invalid email format");
+
+                    if (row.state_medical_council) {
+                        const council = String(row.state_medical_council).trim().toLowerCase();
+
+                        if (!VALID_STATE_COUNCILS.has(council)) {
+                            throw new Error(
+                                `Invalid state medical council: "${row.state_medical_council}"`
+                            );
+                        }
+                    }
+
+                    // ── Resolve country name → id
+                    const countryKey = String(row.country).trim().toLowerCase();
+                    const country_id = countryMap[countryKey];
+                    if (!country_id) throw new Error(`Country "${row.country}" not found`);
 
                     const hashedPassword = await bcrypt.hash(row.password, 10);
 
@@ -182,18 +219,17 @@ const uploadBulkDoctors = async (req, res) => {
                         name: row.name,
                         email: row.email,
                         hashedPassword,
-                        role: "DOCTOR"
+                        role: "DOCTOR",
+                        country_id,
                     }, client);
 
                     await doctorModel.createDoctorProfile(user.id, client);
 
                     await doctorModel.updateDoctorProfile(user.id, {
-                        specialty: row.specialty,
-                        experience: Number(row.experience),
-                        city: row.city,
-                        state: row.state,
+                        experience: Number(row.experience) || null,
                         registration_number: row.registration_number,
                         registration_year: Number(row.registration_year),
+                        state_medical_council: row.state_medical_council || null,
                     }, client);
 
                     await client.query("COMMIT");
@@ -201,11 +237,7 @@ const uploadBulkDoctors = async (req, res) => {
                     success.push({ row: i + 1, email: row.email });
                 } catch (err) {
                     await client.query("ROLLBACK");
-                    failed.push({
-                        row: i + 1,
-                        email: row.email,
-                        error: err.message
-                    })
+                    failed.push({ row: i + 1, email: row.email, error: err.message });
                 }
             }
         } finally {
@@ -216,14 +248,13 @@ const uploadBulkDoctors = async (req, res) => {
             message: "Bulk upload completed",
             successCount: success.length,
             failedCount: failed.length,
-            failed
+            failed,
         });
+
     } catch (error) {
-        return res.status(500).json({
-            message: error?.message || error
-        });
+        return res.status(500).json({ message: error?.message || error });
     }
-}
+};
 
 const getProfileViewAnalyticsDashboard = async (req, res) => {
     try {
@@ -335,7 +366,7 @@ const getTopSearchTerms = async (req, res) => {
         return res.status(500).json({ message: error?.message || error });
     }
 };
- 
+
 // GET /admin/search-analytics/recent?page=1&limit=20
 // Returns: raw paginated search log
 const getRecentSearches = async (req, res) => {
@@ -347,7 +378,7 @@ const getRecentSearches = async (req, res) => {
         return res.status(500).json({ message: error?.message || error });
     }
 };
- 
+
 // GET /admin/search-analytics/by-date?days=14
 // Returns: daily search count for the last N days (for trend chart)
 const getSearchesByDate = async (req, res) => {

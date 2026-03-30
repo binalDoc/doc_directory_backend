@@ -108,3 +108,20 @@ CREATE INDEX idx_pharma_user_id ON pharma_profiles(user_id);
 CREATE INDEX idx_profile_views_viewer ON profile_views(viewer_user_id);
 CREATE INDEX idx_profile_views_doctor ON profile_views(doctor_profile_id);
 CREATE INDEX idx_profile_views_time ON profile_views(viewed_at);
+
+-- Filter/aggregate by searched fields
+CREATE INDEX idx_sa_specialty ON search_analytics(specialty);
+CREATE INDEX idx_sa_name ON search_analytics(name);
+CREATE INDEX idx_sa_country_id ON search_analytics(country_id);
+CREATE INDEX idx_sa_state_id ON search_analytics(state_id);
+CREATE INDEX idx_sa_city_id ON search_analytics(city_id);
+
+-- Time-based trend queries (most common for analytics dashboards)
+CREATE INDEX idx_sa_searched_at ON search_analytics(searched_at DESC);
+
+-- Per-user activity lookup
+CREATE INDEX idx_sa_user_id ON search_analytics(user_id);
+
+-- Combined: trend queries filtered by a specific field (e.g. "specialty searches over time")
+CREATE INDEX idx_sa_specialty_time ON search_analytics(specialty, searched_at DESC);
+CREATE INDEX idx_sa_location_time ON search_analytics(country_id, state_id, searched_at DESC);
