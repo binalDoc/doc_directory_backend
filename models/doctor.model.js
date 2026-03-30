@@ -217,7 +217,7 @@ const getDoctors = async (filters, userId) => {
         values.push(status);
     }
 
-    if (nmc_verified && nmc_verified==="true") {
+    if (nmc_verified && nmc_verified === "true") {
         query += ` AND dp.nmc_verified = $${index++}`;
         values.push(nmc_verified);
     }
@@ -335,6 +335,7 @@ const getDoctorsForExport = async (filters) => {
         minExperience,
         sortBy,
         order,
+        nmc_verified
     } = filters;
 
     // Same query as getDoctors — just no LIMIT / OFFSET
@@ -364,6 +365,11 @@ const getDoctorsForExport = async (filters) => {
     if (status) {
         query += ` AND dp.status = $${index++}`;
         values.push(status);
+    }
+
+    if (nmc_verified && nmc_verified === "true") {
+        query += ` AND dp.nmc_verified = $${index++}`;
+        values.push(nmc_verified);
     }
 
     if (specialty) {
