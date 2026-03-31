@@ -76,6 +76,15 @@ CREATE TABLE search_analytics (
     searched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE nmc_import_logs (
+    id SERIAL PRIMARY KEY,
+    admin_id INT,
+    registration_year INT,
+    last_offset INT DEFAULT 0,
+    used_at DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- USERS TABLE INDEXES
 -- Fast lookup for login/signup
 CREATE UNIQUE INDEX idx_users_email ON users(email);

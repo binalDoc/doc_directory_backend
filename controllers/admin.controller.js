@@ -4,8 +4,10 @@ const userModel = require("../models/user.model")
 const doctorModel = require("../models/doctor.model")
 const pharmaModel = require("../models/pharma.model")
 const activityModel = require("../models/activity.model");
+const nmcImportModel = require("../models/nmcImport.model");
+
 const pool = require("../config/db/db");
-const { MSD_STATE_COUNCILS } = require("../utils/helper");
+const { MSD_STATE_COUNCILS, fetchNMCDoctors, clearDoctorsCache, verifyDoctorFromNMC } = require("../utils/helper");
 
 const createUserByAdmin = async (req, res) => {
     try {
@@ -15,6 +17,11 @@ const createUserByAdmin = async (req, res) => {
         const existing = await userModel.getUserByEmail(email);
         if (existing) {
             return res.status(400).json({ message: "Email already exists" });
+        }
+
+        if (profileData?.registration_number && profileData?.registration_year && profileData?.state_medical_council) {
+            const existing = await doctorModel.getDoctorProfileByRegNoCouncilRegYear(profileData?.registration_number, profileData?.registration_year, profileData?.state_medical_council);
+            if (existing) throw new Error("Doctor already exists");
         }
 
         //Hash password
@@ -50,6 +57,8 @@ const createUserByAdmin = async (req, res) => {
             );
         }
 
+        await clearDoctorsCache();
+
         return res.status(201).json({
             message: "User created successfully",
             result: {
@@ -80,6 +89,12 @@ const updateUserByAdmin = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
+        if (rest?.registration_number && rest?.registration_year && rest?.state_medical_council) {
+            const existing = await doctorModel.getDoctorProfileByRegNoCouncilRegYear(rest?.registration_number, rest?.registration_year, rest?.state_medical_council);
+            if (existing && String(existing.user_id)!==String(id)) throw new Error("Doctor already exists");
+        }
+
+
         const updatedUser = await userModel.updateUser(id, {
             name,
             email,
@@ -99,6 +114,8 @@ const updateUserByAdmin = async (req, res) => {
             profile = await pharmaModel.updatePharmaProfile(id, profileData || {});
         }
 
+        await clearDoctorsCache();
+
         return res.status(200).json({
             message: "User updated successfully",
             result: { ...updatedUser, ...profile }
@@ -109,10 +126,68 @@ const updateUserByAdmin = async (req, res) => {
     }
 };
 
+const verifyDoctorOnNMC = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const existingUser = await userModel.getUserById(id);
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        const profile = await doctorModel.getDoctorProfileByUserId(id);
+        if (!profile || profile.nmc_verified) {
+            return res.status(404).json({ message: "Invalid doctor profile" });
+        }
+
+        let nmc_verified = profile?.nmc_verified || false;
+        let profileData = { ...existingUser, ...profile };
+
+        const keyFields = [
+            "name",
+            "registration_number",
+            "state_medical_council",
+            "registration_year"
+        ];
+
+        const isReadyForVerification = keyFields.every(
+            (key) => profileData[key] && String(profileData[key]).trim() !== ""
+        );
+
+        if (isReadyForVerification) {
+            try {
+                console.log("NMC API called")
+                const isVerified = await verifyDoctorFromNMC(profileData);
+                nmc_verified = isVerified;
+            } catch (error) {
+                console.error("Verification failed:", error.message);
+                throw new Error(error?.message || error);
+            }
+
+        } else {
+            throw new Error("Incomplete profile");
+        }
+
+        const result = await doctorModel.updateDoctorNMCFlag(nmc_verified, id);
+
+        await clearDoctorsCache();
+
+        return res.status(200).json({
+            message: "NMC verification done",
+            result
+        });
+
+    } catch (error) {
+        return res.status(500).json({ message: error?.message || error });
+    }
+}
+
 const deleteUserByAdmin = async (req, res) => {
     try {
         const { id } = req.params;
         await userModel.deleteUser(id);
+
+        await clearDoctorsCache();
 
         return res.status(200).json({
             message: "User deleted successfully"
@@ -146,6 +221,8 @@ const uploadBulkDoctors = async (req, res) => {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(sheet);
 
+        if (data.length > 5) return res.status(400).json({ message: "You can upload maximum 5 doctors at a time", code: "LIMIT_EXCEEDED" });
+
         const success = [];
         const failed = [];
 
@@ -158,9 +235,7 @@ const uploadBulkDoctors = async (req, res) => {
         });
 
         const VALID_STATE_COUNCILS = new Set(
-            MSD_STATE_COUNCILS
-                .filter(c => c.value !== 0)
-                .map(c => c.label.trim().toLowerCase())
+            MSD_STATE_COUNCILS.filter(c => c.value !== 0).map(c => c.label.trim().toLowerCase())
         );
 
         const client = await pool.connect();
@@ -215,6 +290,11 @@ const uploadBulkDoctors = async (req, res) => {
                     const existing = await userModel.getUserByEmail(row.email, client);
                     if (existing) throw new Error("Email already exists");
 
+                    if (row?.registration_number && row?.registration_year && row?.state_medical_council) {
+                        const existing = await doctorModel.getDoctorProfileByRegNoCouncilRegYear(row?.registration_number, row?.registration_year, row?.state_medical_council);
+                        if (existing) throw new Error("Doctor already exists");
+                    }
+
                     const user = await userModel.createUser({
                         name: row.name,
                         email: row.email,
@@ -244,6 +324,8 @@ const uploadBulkDoctors = async (req, res) => {
             client.release();
         }
 
+        await clearDoctorsCache();
+
         return res.status(201).json({
             message: "Bulk upload completed",
             successCount: success.length,
@@ -253,6 +335,118 @@ const uploadBulkDoctors = async (req, res) => {
 
     } catch (error) {
         return res.status(500).json({ message: error?.message || error });
+    }
+};
+
+const importDoctorsFromNMC = async (req, res) => {
+    const { year, limit } = req.query;
+    const adminId = req.user.id;
+
+    if (!year || !limit) {
+        return res.status(400).json({ message: "Year and limit are required" });
+    }
+
+    if (limit > 5) {
+        return res.status(400).json({ message: "Limit cannot exceed 5" });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        const alreadyUsed = await nmcImportModel.checkTodayUsage(adminId, client);
+
+        if (alreadyUsed) {
+            return res.status(400).json({
+                message: "You can import from NMC only once per day"
+            });
+        }
+
+        const offset = await nmcImportModel.getLastOffset(adminId, year, client);
+
+        const nmcDoctors = await fetchNMCDoctors(year, limit, offset);
+
+        if (!nmcDoctors || nmcDoctors.length === 0) {
+            return res.status(400).json({
+                message: "No more doctors available for this year"
+            });
+        }
+
+        const success = [];
+        const failed = [];
+
+        for (let i = 0; i < nmcDoctors.length; i++) {
+            const doc = nmcDoctors[i];
+
+            try {
+                // Example mapping (adjust based on your API)
+                const email = `${doc.registration_number}@nmc.temp`;
+                const password = "Doctor@123";
+
+                const hashedPassword = await bcrypt.hash(password, 10);
+
+                if (doc?.registration_number && year && doc?.state_medical_council) {
+                    const existing = await doctorModel.getDoctorProfileByRegNoCouncilRegYear(doc?.registration_number, year, doc?.state_medical_council);
+                    if (existing) throw new Error("Doctor already exists");
+                }
+
+                const cleanName = (name) => {
+                    return name
+                        ?.trim()
+                        .replace(/\s+/g, " ");
+                };
+
+                const user = await userModel.createUser({
+                    name: cleanName(doc?.name || ""),
+                    email,
+                    hashedPassword,
+                    role: "DOCTOR",
+                    country_id: 1 // India default
+                }, client);
+
+                await doctorModel.createDoctorProfile(user.id, client);
+
+                await doctorModel.updateDoctorProfile(user.id, {
+                    registration_number: doc.registration_number,
+                    registration_year: Number(year),
+                    state_medical_council: doc.state_medical_council || null
+                }, client);
+
+                success.push({ name: doc.name });
+
+            } catch (err) {
+                failed.push({ name: doc.name, error: err.message });
+                throw err;
+            }
+        }
+
+        await nmcImportModel.createImportLog(
+            adminId,
+            year,
+            offset + nmcDoctors.length,
+            client
+        );
+
+        await client.query("COMMIT");
+
+        await clearDoctorsCache();
+
+        return res.status(201).json({
+            message: "Doctors imported successfully",
+            successCount: success.length,
+            failedCount: failed.length,
+            failed
+        });
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+
+        return res.status(500).json({
+            message: error.message || "Something went wrong"
+        });
+    } finally {
+        client.release();
     }
 };
 
@@ -394,9 +588,11 @@ const getSearchesByDate = async (req, res) => {
 module.exports = {
     createUserByAdmin,
     updateUserByAdmin,
+    verifyDoctorOnNMC,
     deleteUserByAdmin,
     getAllUsers,
     uploadBulkDoctors,
+    importDoctorsFromNMC,
     getProfileViewAnalyticsDashboard,
     getDoctorViewCount,
     getRecentViews,

@@ -1,10 +1,18 @@
 const pool = require("./db/db");
 const express = require("express");
-const cors = require("cors");
+const cors = require("cors"); 
 const routes = require("../routes/index");
+const redisClient = require("./redis");
+
 // const passport = require("./passport");
 
 const app = express();
+
+redisClient.connect()
+  .then(async () => {
+    console.log("Redis connected");
+  })
+  .catch(console.error);
 
 // enable CORS - Cross Origin Resource Sharing
 app.use(

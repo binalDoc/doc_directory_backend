@@ -17,6 +17,13 @@ const envVarsSchema = Joi.object({
         .description('Cloudinary api key is required'),
     CLOUDINARY_API_SECRET: Joi.string().required()
         .description('Cloudinary api secret is required'),
+    REDIS_PASSWORD: Joi.string().required()
+        .description('Redis password is required'),
+    REDIS_HOST: Joi.string().required()
+        .description('Redis host is required'),
+    REDIS_PORT: Joi.string().required()
+        .description('Redis port is required'),
+    
     
     // WASABI_PUBLIC_BUCKET_ACCESS_KEY: Joi.string().required(),
     // WASABI_PUBLIC_BUCKET_SECRET_KEY: Joi.string().required(),
@@ -44,7 +51,12 @@ const config = {
         apiKey: envVars.CLOUDINARY_API_KEY,
         apiSecret: envVars.CLOUDINARY_API_SECRET
     },
-    nmc_doc_verification_api: envVars.NMC_DOCTOR_VERIFICATION_API
+    nmc_doc_verification_api: envVars.NMC_DOCTOR_VERIFICATION_API,
+    redis: {
+        host: envVars.REDIS_HOST,
+        port: envVars.REDIS_PORT,
+        password: envVars.REDIS_PASSWORD
+    }
     // asset_storage: envVars.ASSET_STORAGE,
     // AWS_S3: {
     //     access_key: envVars.S3_PUBLIC_BUCKET_ACCESS_KEY,

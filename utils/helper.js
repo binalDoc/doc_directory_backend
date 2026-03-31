@@ -1,6 +1,7 @@
 const config = require("../config/config");
 const axios = require("axios");
 const https = require("https");
+const redisClient = require("../config/redis");
 
 const calculateDoctorProfileCompletion = (profile) => {
     const fields = ["specialty", "bio", "qualification", "experience", "hospital", "country_id", "profile_image_url", "registration_number", "registration_year", "state_medical_council"];
@@ -80,15 +81,16 @@ const verifyDoctorFromNMC = async (profile) => {
         const smcId = council.value;
 
         const cleanName = name?.toLowerCase().trim();
+        const firstWord = cleanName.trim().split(/\s+/)[0];
 
         const encodedName = encodeURIComponent(
-            encodeURIComponent(cleanName)
+            encodeURIComponent(firstWord)
         );
 
         api_url += `&name=${encodedName}`;
         api_url += `&registrationNo=${registration_number}`;
         api_url += `&smcId=${smcId}`;
-        api_url += `&name=${encodedName}`;
+        api_url += `&start=0&length=500`;
 
         if (registration_year) {
             api_url += `&year=${registration_year}`;
@@ -98,6 +100,7 @@ const verifyDoctorFromNMC = async (profile) => {
             httpsAgent: new https.Agent({
                 rejectUnauthorized: false,
             }),
+            timeout: 10000
         });
 
         const result = response.data;
@@ -107,19 +110,77 @@ const verifyDoctorFromNMC = async (profile) => {
             result.data &&
             result.data.length > 0
         ) {
-            return true;
+            return result.data.some(
+                item => String(item[2]) === String(registration_number)
+            );
         }
 
         return false;
     } catch (error) {
+        const isTimeout = error.code === "ECONNABORTED" || error.message?.includes("timeout");
+        const isServerError = error.response?.status === 500;
+
+        if (isTimeout || isServerError) {
+            throw new Error("NMC server is down, please try again later");
+        }
+
         console.log("NMC Verification Error:", error.message);
         throw error;
     }
 };
 
+const fetchNMCDoctors = async (year, limit, offset) => {
+    try {
+        let api_url = config.nmc_doc_verification_api;
+
+        api_url += `&year=${year}`;
+        api_url += `&start=${offset}`;
+        api_url += `&length=${limit}`;
+
+        const response = await axios.get(api_url, {
+            httpsAgent: new https.Agent({
+                rejectUnauthorized: false,
+            }),
+            timeout: 10000
+        });
+
+        const result = response.data;
+
+        if (!result || !Array.isArray(result.data)) {
+            throw new Error("Invalid NMC API response format");
+        }
+
+        const doctors = result.data.map((item) => ({
+            registration_number: item[2],
+            state_medical_council: item[3] || null,
+            name: item[4],
+            registration_year: item[1]
+        }));
+
+        return doctors;
+
+    } catch (error) {
+        console.log("NMC import error:", error.message);
+
+        throw new Error(
+            error?.response?.data?.message ||
+            "Failed to fetch doctors from NMC"
+        );
+    }
+};
+
+const clearDoctorsCache = async () => {
+    const keys = await redisClient.keys("doctors:*");
+    if (keys.length) {
+        await redisClient.del(keys);
+    }
+};
 
 
 module.exports = {
     calculateDoctorProfileCompletion,
-    verifyDoctorFromNMC
+    verifyDoctorFromNMC,
+    MSD_STATE_COUNCILS,
+    fetchNMCDoctors,
+    clearDoctorsCache
 }

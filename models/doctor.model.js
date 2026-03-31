@@ -26,7 +26,7 @@ const updateDoctorProfile = async (userId, data, client = null) => {
 
     const existing = existingRes.rows[0];
 
-    const updatedData = { ...existing, ...data };
+    const updatedData = {...data };
 
     let nmc_verified = existing.nmc_verified;
 
@@ -101,6 +101,25 @@ const updateDoctorProfile = async (userId, data, client = null) => {
     return result.rows[0];
 };
 
+const updateDoctorNMCFlag = async (nmc_verified, id) => {
+    const query = `
+        UPDATE doctor_profiles SET
+            nmc_verified          = $1,
+            status                = $2
+        WHERE user_id = $3
+        RETURNING *;
+    `;
+
+    const values = [
+        nmc_verified,
+        "PENDING",
+        id
+    ];
+
+    const result = await pool.query(query, values);
+    return result.rows[0];
+}
+
 const getDoctorProfileById = async (id) => {
     const query = `
         SELECT 
@@ -148,6 +167,19 @@ const getDoctorProfileByUserId = async (user_id) => {
     const result = await pool.query(query, [user_id]);
     return result.rows[0];
 };
+
+const getDoctorProfileByRegNoCouncilRegYear = async (registration_number, registration_year, state_medical_council) => {
+    const query = `SELECT 
+      dp.*
+    FROM doctor_profiles dp
+    WHERE dp.registration_number = $1
+      AND dp.registration_year = $2
+      AND dp.state_medical_council = $3;
+  `;
+
+    const result = await pool.query(query, [registration_number, registration_year, state_medical_council]);
+    return result.rows[0];
+}
 
 const logSearchAnalytics = async (filters, userId) => {
     try {
@@ -415,8 +447,10 @@ const getDoctorsForExport = async (filters) => {
 module.exports = {
     createDoctorProfile,
     updateDoctorProfile,
+    updateDoctorNMCFlag,
     getDoctorProfileById,
     getDoctorProfileByUserId,
+    getDoctorProfileByRegNoCouncilRegYear,
     getDoctors,
     updateDoctorStatus,
     getDoctorStatusCounts,
