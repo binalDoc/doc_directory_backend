@@ -116,7 +116,7 @@ const uploadDoctorImage = async (req, res) => {
 //for public profile view
 const getDoctorProfileById = async (req, res) => {
     try {
-        const viewerId = req.user.id; // pharma/admin
+        const viewerId = req?.user?.id || null; // pharma/admin
         const doctorId = req.params.id;
 
         const doctorProfile = await doctorModel.getDoctorProfileById(doctorId);
@@ -138,7 +138,7 @@ const getDoctorProfileById = async (req, res) => {
 
 const getDoctors = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req?.user?.id || null;
 
         const sortedQuery = Object.keys(req.query)
             .sort()
@@ -147,7 +147,7 @@ const getDoctors = async (req, res) => {
                 return acc;
             }, {});
 
-        const cacheKey = `doctors:${userId}:${JSON.stringify(sortedQuery)}`;
+        const cacheKey = `doctors:${JSON.stringify(sortedQuery)}`;
 
         const cachedData = await redisClient.get(cacheKey);
 

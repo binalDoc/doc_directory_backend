@@ -8,8 +8,15 @@ const pharmaRoutes = require("./pharma.routes");
 const adminRoutes = require("./admin.routes");
 const geographyRoutes = require("./geography.routes");
 
+const doctorController = require("../controllers/doctor.controller");
+
 router.use("/auth", authRoutes);
 router.use("/geography", geographyRoutes);
+
+router.get("/doctor/list", doctorController.getDoctors);
+router.get("/doctor/:id", doctorController.getDoctorProfileById);
+
+
 router.use("/doctor", authenticate, doctorRoutes);
 router.use("/pharma", authenticate, pharmaRoutes);
 router.use("/admin", authenticate, authorizeRoles("ADMIN"), adminRoutes);

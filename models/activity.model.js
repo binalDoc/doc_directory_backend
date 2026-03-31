@@ -8,7 +8,7 @@ const logProfileView = async(viewerId,doctorId) => {
     RETURNING *;
     `;
 
-    const values = [viewerId,doctorId];
+    const values = [viewerId || null,doctorId];
     const result = await pool.query(query,values);
 
     return result.rows[0];
