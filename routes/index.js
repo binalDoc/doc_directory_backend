@@ -13,8 +13,8 @@ const doctorController = require("../controllers/doctor.controller");
 router.use("/auth", authRoutes);
 router.use("/geography", geographyRoutes);
 
-router.get("/doctor/list", doctorController.getDoctors);
-router.get("/doctor/:id", doctorController.getDoctorProfileById);
+router.get("/doctors/list", doctorController.getDoctors);
+router.get("/doctors/:id", doctorController.getDoctorProfileById);
 
 
 router.use("/doctor", authenticate, doctorRoutes);

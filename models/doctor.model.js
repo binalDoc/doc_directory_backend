@@ -26,12 +26,11 @@ const updateDoctorProfile = async (userId, data, client = null) => {
 
     const existing = existingRes.rows[0];
 
-    const updatedData = {...data };
+    const updatedData = {...existing, ...data };
 
     let nmc_verified = existing.nmc_verified;
 
     const keyFields = [
-        "name",
         "registration_number",
         "state_medical_council",
         "registration_year"

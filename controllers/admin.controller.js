@@ -91,7 +91,7 @@ const updateUserByAdmin = async (req, res) => {
 
         if (rest?.registration_number && rest?.registration_year && rest?.state_medical_council) {
             const existing = await doctorModel.getDoctorProfileByRegNoCouncilRegYear(rest?.registration_number, rest?.registration_year, rest?.state_medical_council);
-            if (existing && String(existing.user_id)!==String(id)) throw new Error("Doctor already exists");
+            if (existing && String(existing.user_id) !== String(id)) throw new Error("Doctor already exists");
         }
 
 
@@ -381,8 +381,8 @@ const importDoctorsFromNMC = async (req, res) => {
 
             try {
                 // Example mapping (adjust based on your API)
-                const email = `${doc.registration_number}@nmc.temp`;
-                const password = "Doctor@123";
+                const randomStr = Math.random().toString(36).substring(2, 8);
+                const email = `${doc.registration_number}${doc.registration_year}${randomStr}@nmc.temp`; const password = "Doctor@123";
 
                 const hashedPassword = await bcrypt.hash(password, 10);
 
