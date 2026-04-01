@@ -403,7 +403,7 @@ const importDoctorsFromNMC = async (req, res) => {
                     email,
                     hashedPassword,
                     role: "DOCTOR",
-                    country_id: 1 // India default
+                    country_id: 101 // India default
                 }, client);
 
                 await doctorModel.createDoctorProfile(user.id, client);
@@ -418,7 +418,7 @@ const importDoctorsFromNMC = async (req, res) => {
 
             } catch (err) {
                 failed.push({ name: doc.name, error: err.message });
-                throw err;
+                //throw err;
             }
         }
 
