@@ -379,6 +379,8 @@ const importDoctorsFromNMC = async (req, res) => {
         for (let i = 0; i < nmcDoctors.length; i++) {
             const doc = nmcDoctors[i];
 
+            console.log(doc);
+
             try {
                 // Example mapping (adjust based on your API)
                 const randomStr = Math.random().toString(36).substring(2, 8);
@@ -397,6 +399,8 @@ const importDoctorsFromNMC = async (req, res) => {
                         ?.trim()
                         .replace(/\s+/g, " ");
                 };
+
+                console.log(email)
 
                 const user = await userModel.createUser({
                     name: cleanName(doc?.name || ""),
