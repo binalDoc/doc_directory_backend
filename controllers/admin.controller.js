@@ -382,7 +382,7 @@ const importDoctorsFromNMC = async (req, res) => {
             try {
                 // Example mapping (adjust based on your API)
                 const randomStr = Math.random().toString(36).substring(2, 8);
-                const email = `${doc.registration_number}${doc.registration_year}${randomStr}@nmc.temp`; 
+                const email = `${doc.registration_number}${doc.registration_year}${randomStr}@nmc.com`; 
                 const password = "Doctor@123";
 
                 const hashedPassword = await bcrypt.hash(password, 10);
