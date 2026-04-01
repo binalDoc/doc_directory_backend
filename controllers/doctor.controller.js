@@ -5,7 +5,7 @@ const userModel = require("../models/user.model");
 const redisClient = require("../config/redis");
 
 const { createExcelWorkbook, addExcelWorksheet, setExcelResponseHeaders, sendExcelWorkbookAsDownload } = require("./export.controller");
-const { calculateDoctorProfileCompletion, clearDoctorsCache } = require("../utils/helper");
+const { calculateDoctorProfileCompletion, clearDoctorsCache, getUserFromToken } = require("../utils/helper");
 
 //for doctor, self profile view
 const getDoctorProfile = async (req, res) => {
@@ -116,7 +116,11 @@ const uploadDoctorImage = async (req, res) => {
 //for public profile view
 const getDoctorProfileById = async (req, res) => {
     try {
-        const viewerId = req?.user?.id || null; // pharma/admin
+        let viewerId = req?.user?.id || null; // pharma/admin
+        if (!viewerId) {
+            const user = await getUserFromToken(req);
+            viewerId = user?.id
+        }
         const doctorId = req.params.id;
 
         const doctorProfile = await doctorModel.getDoctorProfileById(doctorId);
@@ -124,7 +128,6 @@ const getDoctorProfileById = async (req, res) => {
         if (!doctorProfile) return res.status(404).json({ message: "Doctor Profile does not exist" });
 
         const userProfile = await userModel.getUserById(doctorProfile?.user_id);
-
         // log activity (avoid self view)
         if (String(viewerId) !== String(doctorId)) {
             await activityModel.logProfileView(viewerId, doctorId);
@@ -138,7 +141,11 @@ const getDoctorProfileById = async (req, res) => {
 
 const getDoctors = async (req, res) => {
     try {
-        const userId = req?.user?.id || null;
+        let userId = req?.user?.id || null;
+        if (!userId) {
+            const user = await getUserFromToken(req);
+            userId = user?.id
+        }
 
         const sortedQuery = Object.keys(req.query)
             .sort()

@@ -2,6 +2,7 @@ const config = require("../config/config");
 const axios = require("axios");
 const https = require("https");
 const redisClient = require("../config/redis");
+const jwt = require("jsonwebtoken");
 
 const calculateDoctorProfileCompletion = (profile) => {
     const fields = ["specialty", "bio", "qualification", "experience", "hospital", "country_id", "profile_image_url", "registration_number", "registration_year", "state_medical_council"];
@@ -176,11 +177,29 @@ const clearDoctorsCache = async () => {
     }
 };
 
+const getUserFromToken = async (req) => {
+        const authHeader = req.headers.authorization;
+
+        // Check if token exists
+        if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+
+        // Extract token
+        const token = authHeader.split(" ")[1];
+
+        // Verify token
+        const decoded = jwt.verify(token, config.jwtSecret);
+
+        if(decoded?.user) return decoded.user;
+        
+        return null;        
+}
+
 
 module.exports = {
     calculateDoctorProfileCompletion,
     verifyDoctorFromNMC,
     MSD_STATE_COUNCILS,
     fetchNMCDoctors,
-    clearDoctorsCache
+    clearDoctorsCache,
+    getUserFromToken
 }
