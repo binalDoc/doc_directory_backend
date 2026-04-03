@@ -315,27 +315,49 @@ const getDoctors = async (filters, userId) => {
     };
 };
 
-const updateDoctorStatus = async (id, status) => {
-    const existing = await pool.query(
-        `SELECT * FROM doctor_profiles WHERE id = $1`,
-        [id]
-    );
+// const updateDoctorStatus = async (id, status) => {
+//     const existing = await pool.query(
+//         `SELECT * FROM doctor_profiles WHERE id = $1`,
+//         [id]
+//     );
 
-    const doctor = existing.rows[0];
+//     const doctor = existing.rows[0];
 
-    if (!doctor.nmc_verified && status === "VERIFIED") {
-        throw new Error("Cannot verify doctor without NMC verification");
-    }
+//     if (!doctor.nmc_verified && status === "VERIFIED") {
+//         throw new Error("Cannot verify doctor without NMC verification");
+//     }
 
+//     const query = `
+//         UPDATE doctor_profiles
+//         SET status = $1
+//         WHERE id = $2
+//         RETURNING *;
+//     `;
+//     const result = await pool.query(query, [status, id]);
+//     return result.rows[0];
+// };
+
+const updateDoctorStatus = async (ids, status) => {
     const query = `
         UPDATE doctor_profiles
         SET status = $1
-        WHERE id = $2
+        WHERE id = ANY($2::int[])
         RETURNING *;
     `;
-    const result = await pool.query(query, [status, id]);
-    return result.rows[0];
+    const result = await pool.query(query, [status, ids]);
+    return result.rows;
 };
+
+const getDoctorsByIds = async (ids) => {
+    const query = `
+        SELECT id, nmc_verified
+        FROM doctor_profiles
+        WHERE id = ANY($1::int[])
+    `;
+    const result = await pool.query(query, [ids]);
+    return result.rows;
+};
+
 
 const getDoctorStatusCounts = async () => {
     const query = `
@@ -452,6 +474,7 @@ module.exports = {
     getDoctorProfileByRegNoCouncilRegYear,
     getDoctors,
     updateDoctorStatus,
+    getDoctorsByIds,
     getDoctorStatusCounts,
     getDoctorsForExport
 };

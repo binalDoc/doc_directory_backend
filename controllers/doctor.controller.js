@@ -183,23 +183,73 @@ const getDoctors = async (req, res) => {
     }
 };
 
+// const updateDoctorStatus = async (req, res) => {
+//     try {
+//         const { id } = req.params;
+//         const { status } = req.body;
+
+//         if (!["VERIFIED", "REJECTED", "PENDING"].includes(status)) {
+//             return res.status(400).json({ message: "Invalid status" });
+//         }
+
+//         const result = await doctorModel.updateDoctorStatus(id, status);
+
+//         await clearDoctorsCache();
+
+//         return res.status(200).json({
+//             message: "Status updated",
+//             result
+//         });
+//     } catch (error) {
+//         return res.status(500).json({
+//             message: error?.message || error
+//         });
+//     }
+// };
+
 const updateDoctorStatus = async (req, res) => {
     try {
-        const { id } = req.params;
-        const { status } = req.body;
+        const { status, ids } = req.body;
+        const singleId = req.params.id;
 
         if (!["VERIFIED", "REJECTED", "PENDING"].includes(status)) {
             return res.status(400).json({ message: "Invalid status" });
         }
 
-        const result = await doctorModel.updateDoctorStatus(id, status);
+        // Normalize to always work with an array
+        let targetIds = singleId ? [singleId] : ids;
+
+        if (!Array.isArray(targetIds) || targetIds.length === 0) {
+            return res.status(400).json({ message: "No doctor IDs provided" });
+        }
+
+        // For VERIFIED — filter out non-NMC verified doctors
+        let skipped = 0;
+        if (status === "VERIFIED") {
+            const doctors = await doctorModel.getDoctorsByIds(targetIds);
+            const eligible = doctors.filter(d => d.nmc_verified).map(d => d.id);
+            skipped = targetIds.length - eligible.length;
+            targetIds = eligible;
+
+            if (targetIds.length === 0) {
+                return res.status(400).json({
+                    message: "No eligible doctors — all selected must be NMC verified to approve"
+                });
+            }
+        }
+
+        const result = await doctorModel.updateDoctorStatus(targetIds, status);
 
         await clearDoctorsCache();
 
         return res.status(200).json({
-            message: "Status updated",
+            message: skipped > 0
+                ? `${targetIds.length} doctor(s) updated. ${skipped} skipped (not NMC verified).`
+                : `${targetIds.length} doctor(s) updated successfully.`,
+            skipped,
             result
         });
+
     } catch (error) {
         return res.status(500).json({
             message: error?.message || error

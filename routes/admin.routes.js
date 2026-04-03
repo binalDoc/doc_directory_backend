@@ -8,6 +8,7 @@ const adminController = require("../controllers/admin.controller");
 router.post("/bulk-doctors", upload.single("file"), adminController.uploadBulkDoctors);
 router.get("/import-doctors", adminController.importDoctorsFromNMC);
 router.put("/nmc-verify-doctor/:id", adminController.verifyDoctorOnNMC);
+router.patch("/doctor-status/bulk", doctorController.updateDoctorStatus);
 router.patch("/doctor-status/:id", doctorController.updateDoctorStatus);
 router.get("/doctor-stats", doctorController.getDoctorStatusCounts);
 router.get("/users", adminController.getAllUsers);
